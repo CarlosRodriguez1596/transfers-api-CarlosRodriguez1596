@@ -21,6 +21,7 @@ func main() {
 
 	// init repositories
 	transfersDB := repositories.NewTransfersMongoDBRepository(cfg.MongoDBConfig)
+	//transfersDB := repositories.NewTransfersMySqlDBRepository(cfg.MySqlDBConfig)
 	logger.Info("repositories created")
 
 	// init services

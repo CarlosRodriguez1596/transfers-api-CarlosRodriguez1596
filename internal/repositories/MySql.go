@@ -16,11 +16,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type TransfersMongoDBRepo struct {
+type TransfersMySqlDBRepo struct {
 	collection *mongo.Collection
 }
 
-type transferMongoDAO struct {
+type transferMySqlDAO struct {
 	ID         primitive.ObjectID `bson:"_id,omitempty"`
 	SenderID   string             `bson:"sender_id"`
 	ReceiverID string             `bson:"receiver_id"`
@@ -29,7 +29,7 @@ type transferMongoDAO struct {
 	State      string             `bson:"state"`
 }
 
-func NewTransfersMongoDBRepository(cfg config.MongoDB) *TransfersMongoDBRepo {
+func NewTransfersMySqlDBRepository(cfg config.MySqlDB) *TransfersMySqlDBRepo {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ConnectTimeout)
 	defer cancel()
 
@@ -45,11 +45,11 @@ func NewTransfersMongoDBRepository(cfg config.MongoDB) *TransfersMongoDBRepo {
 	}
 
 	collection := client.Database(cfg.Database).Collection(cfg.Collection)
-	return &TransfersMongoDBRepo{collection: collection}
+	return &TransfersMySqlDBRepo{collection: collection}
 }
 
-func (r *TransfersMongoDBRepo) Create(ctx context.Context, transfer models.Transfer) (string, error) {
-	dao := transferMongoDAO{
+func (r *TransfersMySqlDBRepo) Create(ctx context.Context, transfer models.Transfer) (string, error) {
+	dao := transferMySqlDAO{
 		SenderID:   transfer.SenderID,
 		ReceiverID: transfer.ReceiverID,
 		Currency:   transfer.Currency.String(),
@@ -66,13 +66,13 @@ func (r *TransfersMongoDBRepo) Create(ctx context.Context, transfer models.Trans
 	return id, nil
 }
 
-func (r *TransfersMongoDBRepo) GetByID(ctx context.Context, id string) (models.Transfer, error) {
+func (r *TransfersMySqlDBRepo) GetByID(ctx context.Context, id string) (models.Transfer, error) {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return models.Transfer{}, fmt.Errorf("error parsing transfer ID %s: %s: %w", id, err.Error(), known_errors.ErrBadRequest)
 	}
 
-	var transfer transferMongoDAO
+	var transfer transferMySqlDAO
 	if err := r.collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&transfer); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return models.Transfer{}, fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
@@ -90,7 +90,7 @@ func (r *TransfersMongoDBRepo) GetByID(ctx context.Context, id string) (models.T
 	}, nil
 }
 
-func (r *TransfersMongoDBRepo) Update(ctx context.Context, transfer models.Transfer) error {
+func (r *TransfersMySqlDBRepo) Update(ctx context.Context, transfer models.Transfer) error {
 	objID, err := primitive.ObjectIDFromHex(transfer.ID)
 	if err != nil {
 		return fmt.Errorf("error parsing transfer ID %s: %s: %w", transfer.ID, err.Error(), known_errors.ErrBadRequest)
@@ -127,7 +127,7 @@ func (r *TransfersMongoDBRepo) Update(ctx context.Context, transfer models.Trans
 	return nil
 }
 
-func (r *TransfersMongoDBRepo) Delete(ctx context.Context, id string) error {
+func (r *TransfersMySqlDBRepo) Delete(ctx context.Context, id string) error {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
 		return fmt.Errorf("error parsing transfer ID %s: %s: %w", id, err.Error(), known_errors.ErrBadRequest)
@@ -141,28 +141,4 @@ func (r *TransfersMongoDBRepo) Delete(ctx context.Context, id string) error {
 		return fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
 	}
 	return nil
-}
-
-func (r *TransfersMongoDBRepo) GetBySenderID(ctx context.Context, id string) (models.Transfer, error) {
-	objID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return models.Transfer{}, fmt.Errorf("error parsing transfer ID %s: %s: %w", id, err.Error(), known_errors.ErrBadRequest)
-	}
-
-	var transfer transferMongoDAO
-	if err := r.collection.FindOne(ctx, bson.M{"_sender_id": objID}).Decode(&transfer); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return models.Transfer{}, fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
-		}
-		return models.Transfer{}, fmt.Errorf("error getting transfer: %w", err)
-	}
-
-	return models.Transfer{
-		ID:         id,
-		SenderID:   transfer.SenderID,
-		ReceiverID: transfer.ReceiverID,
-		Currency:   enums.ParseCurrency(transfer.Currency),
-		Amount:     transfer.Amount,
-		State:      transfer.State, // TODO: replace with enums.ParseState
-	}, nil
 }

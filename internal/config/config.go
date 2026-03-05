@@ -2,14 +2,16 @@ package config
 
 import (
 	"encoding/json"
-	"github.com/caarlos0/env/v10"
 	"time"
 	"transfers-api/internal/logging"
+
+	"github.com/caarlos0/env/v10"
 )
 
 type Config struct {
 	Business      BusinessConfig `json:"business"`
 	MongoDBConfig MongoDB        `json:"mongodb"`
+	MySqlDBConfig MySqlDB        `json:"mysqldb"`
 }
 
 type BusinessConfig struct {
@@ -17,6 +19,15 @@ type BusinessConfig struct {
 }
 
 type MongoDB struct {
+	ConnectTimeout time.Duration `env:"MONGODB_CONNECT_TIMEOUT" envDefault:"10s" json:"connect_timeout"`
+	Hostname       string        `env:"MONGODB_HOSTNAME" envDefault:"mongodb" json:"hostname"`
+	Port           int           `env:"MONGODB_PORT" envDefault:"27017" json:"port"`
+	Username       string        `env:"MONGODB_USERNAME" envDefault:"root" json:"username"`
+	Password       string        `env:"MONGODB_PASSWORD" envDefault:"root" json:"password"`
+	Database       string        `env:"MONGODB_DATABASE" envDefault:"transfers-db" json:"database"`
+	Collection     string        `env:"MONGODB_COLLECTION" envDefault:"transfers" json:"collection"`
+}
+type MySqlDB struct {
 	ConnectTimeout time.Duration `env:"MONGODB_CONNECT_TIMEOUT" envDefault:"10s" json:"connect_timeout"`
 	Hostname       string        `env:"MONGODB_HOSTNAME" envDefault:"mongodb" json:"hostname"`
 	Port           int           `env:"MONGODB_PORT" envDefault:"27017" json:"port"`
