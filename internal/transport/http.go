@@ -14,7 +14,6 @@ type TransfersHandler interface {
 	GetByID(ctx *gin.Context)
 	Update(ctx *gin.Context)
 	Delete(ctx *gin.Context)
-	GetBySenderID(ctx *gin.Context)
 }
 
 type HTTPServer struct {
@@ -36,7 +35,6 @@ func (s *HTTPServer) MapRoutes() {
 	s.engine.POST("/transfers", s.transfersHandler.Create)
 	s.engine.PUT("/transfers/:id", s.transfersHandler.Update)
 	s.engine.DELETE("/transfers/:id", s.transfersHandler.Delete)
-	s.engine.GET("/transfers/sender/:senderId", s.transfersHandler.GetBySenderID)
 }
 
 func (s *HTTPServer) Run(port string) {

@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"transfers-api/internal/config"
@@ -10,46 +11,87 @@ import (
 	"transfers-api/internal/logging"
 	"transfers-api/internal/models"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 type TransfersMySqlDBRepo struct {
-	collection *mongo.Collection
+	db *sql.DB
 }
 
-type transferMySqlDAO struct {
-	ID         primitive.ObjectID `bson:"_id,omitempty"`
-	SenderID   string             `bson:"sender_id"`
-	ReceiverID string             `bson:"receiver_id"`
-	Currency   string             `bson:"currency"`
-	Amount     float64            `bson:"amount"`
-	State      string             `bson:"state"`
+type transferMySQLDAO struct {
+	ID         int64
+	SenderID   string
+	ReceiverID string
+	Currency   string
+	Amount     float64
+	State      string
 }
 
 func NewTransfersMySqlDBRepository(cfg config.MySqlDB) *TransfersMySqlDBRepo {
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ConnectTimeout)
-	defer cancel()
 
-	uri := fmt.Sprintf("mongodb://%s:%d", cfg.Hostname, cfg.Port)
-	if cfg.Username != "" && cfg.Password != "" {
-		uri = fmt.Sprintf("mongodb://%s:%s@%s:%d/?authSource=admin", cfg.Username, cfg.Password, cfg.Hostname, cfg.Port)
-	}
+	dsn := fmt.Sprintf(
+		"%s:%s@tcp(%s:%d)/%s?parseTime=true",
+		cfg.Username,
+		cfg.Password,
+		cfg.Hostname,
+		cfg.Port,
+		cfg.Database,
+	)
 
-	clientOpts := options.Client().ApplyURI(uri)
-	client, err := mongo.Connect(ctx, clientOpts)
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		logging.Logger.Fatalf("error connecting to MongoDB: %v", err)
+		logging.Logger.Fatalf("error connecting to MySQL: %v", err)
 	}
 
-	collection := client.Database(cfg.Database).Collection(cfg.Collection)
-	return &TransfersMySqlDBRepo{collection: collection}
+	if err := db.Ping(); err != nil {
+		logging.Logger.Fatalf("error pinging MySQL: %v", err)
+	}
+
+	return &TransfersMySqlDBRepo{
+		db: db,
+	}
+}
+
+func (r *TransfersMySqlDBRepo) GetByID(ctx context.Context, id string) (models.Transfer, error) {
+
+	var dao transferMySQLDAO
+
+	query := `
+	SELECT id, sender_id, receiver_id, currency, amount, state
+	FROM transfers
+	WHERE id = ?`
+
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&dao.ID,
+		&dao.SenderID,
+		&dao.ReceiverID,
+		&dao.Currency,
+		&dao.Amount,
+		&dao.State,
+	)
+
+	if err != nil {
+
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.Transfer{}, fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
+		}
+
+		return models.Transfer{}, fmt.Errorf("error getting transfer: %w", err)
+	}
+
+	return models.Transfer{
+		ID:         fmt.Sprintf("%d", dao.ID),
+		SenderID:   dao.SenderID,
+		ReceiverID: dao.ReceiverID,
+		Currency:   enums.ParseCurrency(dao.Currency),
+		Amount:     dao.Amount,
+		State:      dao.State, // TODO: replace with enums.ParseState
+	}, nil
 }
 
 func (r *TransfersMySqlDBRepo) Create(ctx context.Context, transfer models.Transfer) (string, error) {
-	dao := transferMySqlDAO{
+
+	dao := transferMySQLDAO{
 		SenderID:   transfer.SenderID,
 		ReceiverID: transfer.ReceiverID,
 		Currency:   transfer.Currency.String(),
@@ -57,88 +99,111 @@ func (r *TransfersMySqlDBRepo) Create(ctx context.Context, transfer models.Trans
 		State:      transfer.State,
 	}
 
-	res, err := r.collection.InsertOne(ctx, dao)
+	query := `
+	INSERT INTO transfers
+	(sender_id, receiver_id, currency, amount, state)
+	VALUES (?, ?, ?, ?, ?)`
+
+	res, err := r.db.ExecContext(
+		ctx,
+		query,
+		dao.SenderID,
+		dao.ReceiverID,
+		dao.Currency,
+		dao.Amount,
+		dao.State,
+	)
+
 	if err != nil {
-		return "", fmt.Errorf("error inserting transfer in MongoDB: %w", err)
+		return "", fmt.Errorf("error inserting transfer in MySQL: %w", err)
 	}
 
-	id := res.InsertedID.(primitive.ObjectID).Hex()
-	return id, nil
-}
-
-func (r *TransfersMySqlDBRepo) GetByID(ctx context.Context, id string) (models.Transfer, error) {
-	objID, err := primitive.ObjectIDFromHex(id)
+	id, err := res.LastInsertId()
 	if err != nil {
-		return models.Transfer{}, fmt.Errorf("error parsing transfer ID %s: %s: %w", id, err.Error(), known_errors.ErrBadRequest)
+		return "", fmt.Errorf("error retrieving inserted id: %w", err)
 	}
 
-	var transfer transferMySqlDAO
-	if err := r.collection.FindOne(ctx, bson.M{"_id": objID}).Decode(&transfer); err != nil {
-		if errors.Is(err, mongo.ErrNoDocuments) {
-			return models.Transfer{}, fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
-		}
-		return models.Transfer{}, fmt.Errorf("error getting transfer: %w", err)
-	}
-
-	return models.Transfer{
-		ID:         id,
-		SenderID:   transfer.SenderID,
-		ReceiverID: transfer.ReceiverID,
-		Currency:   enums.ParseCurrency(transfer.Currency),
-		Amount:     transfer.Amount,
-		State:      transfer.State, // TODO: replace with enums.ParseState
-	}, nil
+	return fmt.Sprintf("%d", id), nil
 }
 
 func (r *TransfersMySqlDBRepo) Update(ctx context.Context, transfer models.Transfer) error {
-	objID, err := primitive.ObjectIDFromHex(transfer.ID)
-	if err != nil {
-		return fmt.Errorf("error parsing transfer ID %s: %s: %w", transfer.ID, err.Error(), known_errors.ErrBadRequest)
-	}
 
-	update := bson.M{}
-	set := bson.M{}
+	setClauses := []string{}
+	args := []interface{}{}
 
 	if transfer.SenderID != "" {
-		set["sender_id"] = transfer.SenderID
-	}
-	if transfer.ReceiverID != "" {
-		set["receiver_id"] = transfer.ReceiverID
-	}
-	if transfer.Currency != enums.CurrencyUnknown {
-		set["currency"] = transfer.Currency.String()
-	}
-	if transfer.Amount != 0 {
-		set["amount"] = transfer.Amount
-	}
-	if transfer.State != "" { // TODO: replace with != enums.StateUnknown
-		set["state"] = transfer.State
+		setClauses = append(setClauses, "sender_id = ?")
+		args = append(args, transfer.SenderID)
 	}
 
-	if len(set) == 0 {
+	if transfer.ReceiverID != "" {
+		setClauses = append(setClauses, "receiver_id = ?")
+		args = append(args, transfer.ReceiverID)
+	}
+
+	if transfer.Currency != enums.CurrencyUnknown {
+		setClauses = append(setClauses, "currency = ?")
+		args = append(args, transfer.Currency.String())
+	}
+
+	if transfer.Amount != 0 {
+		setClauses = append(setClauses, "amount = ?")
+		args = append(args, transfer.Amount)
+	}
+
+	if transfer.State != "" {
+		setClauses = append(setClauses, "state = ?")
+		args = append(args, transfer.State)
+	}
+
+	if len(setClauses) == 0 {
 		return fmt.Errorf("no valid fields to update: %w", known_errors.ErrBadRequest)
 	}
 
-	update["$set"] = set
+	query := fmt.Sprintf(
+		"UPDATE transfers SET %s WHERE id = ?",
+		joinClauses(setClauses),
+	)
 
-	if _, err := r.collection.UpdateByID(ctx, objID, update); err != nil {
+	args = append(args, transfer.ID)
+
+	res, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
 		return fmt.Errorf("error updating transfer: %w", err)
 	}
+
+	rows, err := res.RowsAffected()
+	if err == nil && rows == 0 {
+		return fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
+	}
+
 	return nil
 }
 
 func (r *TransfersMySqlDBRepo) Delete(ctx context.Context, id string) error {
-	objID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return fmt.Errorf("error parsing transfer ID %s: %s: %w", id, err.Error(), known_errors.ErrBadRequest)
-	}
 
-	res, err := r.collection.DeleteOne(ctx, bson.M{"_id": objID})
+	query := `DELETE FROM transfers WHERE id = ?`
+
+	res, err := r.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return fmt.Errorf("error deleting transfer: %w", err)
 	}
-	if res.DeletedCount == 0 {
+
+	rows, err := res.RowsAffected()
+	if err == nil && rows == 0 {
 		return fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
 	}
+
 	return nil
+}
+
+func joinClauses(clauses []string) string {
+	out := ""
+	for i, c := range clauses {
+		if i > 0 {
+			out += ", "
+		}
+		out += c
+	}
+	return out
 }

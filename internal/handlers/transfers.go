@@ -20,7 +20,6 @@ type TransfersService interface {
 	GetByID(ctx context.Context, id string) (models.Transfer, error)
 	Update(ctx context.Context, transfer models.Transfer) error
 	Delete(ctx context.Context, id string) error
-	GetBySenderID(ctx context.Context, id string) (models.Transfer, error)
 }
 
 type TransfersHandler struct {
@@ -180,34 +179,4 @@ func (h *TransfersHandler) Delete(ctx *gin.Context) {
 
 	// return ok
 	ctx.JSON(http.StatusOK, gin.H{"id": id})
-}
-
-func (h *TransfersHandler) GetBySenderID(ctx *gin.Context) {
-	// parse id
-	id := ctx.Param("sender_id")
-
-	// get transfer
-	transfer, err := h.transfersSvc.GetBySenderID(ctx.Request.Context(), id)
-	if err != nil {
-		if errors.Is(err, known_errors.ErrBadRequest) {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-		if errors.Is(err, known_errors.ErrNotFound) {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// return transfer
-	ctx.JSON(http.StatusOK, GetTransferByIDResponse{
-		ID:         transfer.ID,
-		SenderID:   transfer.SenderID,
-		ReceiverID: transfer.ReceiverID,
-		Currency:   transfer.Currency.String(),
-		Amount:     transfer.Amount,
-		State:      transfer.State, // TODO: replace with transfer.State.String()
-	})
 }
