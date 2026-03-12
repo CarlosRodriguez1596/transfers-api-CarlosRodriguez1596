@@ -24,6 +24,13 @@ services:
     volumes:
       - mysql_data:/data/db
 
+  memcached:
+    image: memcached:1.6
+    container_name: transfers-memcached
+    restart: always
+    ports:
+      - "11211:11211"
+
   app:
     image: transfers-api:0.1.0
     build:
