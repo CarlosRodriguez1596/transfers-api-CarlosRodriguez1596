@@ -13,6 +13,7 @@ type Config struct {
 	MongoDBConfig   MongoDB        `json:"mongodb"`
 	MySqlDBConfig   MySqlDB        `json:"mysql"`
 	MemcachedConfig Memcached      `json:"memcached"`
+	RabbitMQConfig  RabbitMQ       `json:"rabbitmq"`
 }
 
 type BusinessConfig struct {
@@ -42,6 +43,14 @@ type Memcached struct {
 	TTLSeconds int    `env:"MEMCACHED_TTL_SECONDS" envDefault:"30" json:"ttl_seconds"`
 }
 
+type RabbitMQ struct {
+	Hostname  string `env:"RABBITMQ_HOSTNAME" envDefault:"rabbitmq" json:"hostname"`
+	Port      int    `env:"RABBITMQ_PORT" envDefault:"5672" json:"port"`
+	Username  string `env:"RABBITMQ_USERNAME" envDefault:"guest" json:"username"`
+	Password  string `env:"RABBITMQ_PASSWORD" envDefault:"guest" json:"password"`
+	QueueName string `env:"RABBITMQ_QUEUE_NAME" envDefault:"transfers-events" json:"queue_name"`
+}
+
 func ParseFromEnv() *Config {
 	var cfg Config
 	for _, nested := range []interface{}{
@@ -49,6 +58,7 @@ func ParseFromEnv() *Config {
 		&cfg.MongoDBConfig,
 		&cfg.MySqlDBConfig,
 		&cfg.MemcachedConfig,
+		&cfg.RabbitMQConfig,
 	} {
 		if err := env.Parse(nested); err != nil {
 			logging.Logger.Fatalf("error parsing config: %v", err)

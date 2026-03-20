@@ -20,17 +20,23 @@ type TransfersRepository interface {
 	Delete(ctx context.Context, id string) error
 }
 
-type TransfersService struct {
-	businessCfg    config.BusinessConfig
-	transfersRepo  TransfersRepository
-	transfersCache TransfersRepository
+type TransfersPublisher interface {
+	Publish(operation string, transferID string) error
 }
 
-func NewTransfersService(businessCfg config.BusinessConfig, transfersRepo TransfersRepository, transfersCache TransfersRepository) *TransfersService {
+type TransfersService struct {
+	businessCfg        config.BusinessConfig
+	transfersRepo      TransfersRepository
+	transfersCache     TransfersRepository
+	transfersPublisher TransfersPublisher
+}
+
+func NewTransfersService(businessCfg config.BusinessConfig, transfersRepo TransfersRepository, transfersCache TransfersRepository, transfersPublisher TransfersPublisher) *TransfersService {
 	return &TransfersService{
-		businessCfg:    businessCfg,
-		transfersRepo:  transfersRepo,
-		transfersCache: transfersCache,
+		businessCfg:        businessCfg,
+		transfersRepo:      transfersRepo,
+		transfersCache:     transfersCache,
+		transfersPublisher: transfersPublisher,
 	}
 }
 
@@ -55,6 +61,14 @@ func (s *TransfersService) Create(ctx context.Context, transfer models.Transfer)
 		return "", fmt.Errorf("error creating transfer in repository: %w", err)
 	}
 	logging.Logger.Infof("Transfer created in DB with ID: %s", id)
+
+	// publish event
+	go func() {
+		if err := s.transfersPublisher.Publish("create", transfer.ID); err != nil {
+			logging.Logger.Warnf("error publishing transfer create event: %w", err)
+		}
+	}()
+
 	transfer.ID = id
 	if _, err := s.transfersCache.Create(ctx, transfer); err != nil {
 		logging.Logger.Warnf("error caching transfer %s: %v", id, err)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"transfers-api/internal/clients"
 	"transfers-api/internal/config"
 	"transfers-api/internal/handlers"
 	"transfers-api/internal/logging"
@@ -25,8 +26,11 @@ func main() {
 	transfersCache := repositories.NewTransfersMemcachedRepository(cfg.MemcachedConfig)
 	logger.Info("repositories created")
 
+	// init clients
+	tranfersDBPublisher := clients.NewRabbitMQClient(cfg.RabbitMQConfig)
+
 	// init services
-	transfersService := services.NewTransfersService(cfg.Business, transfersDB, transfersCache)
+	transfersService := services.NewTransfersService(cfg.Business, transfersDB, transfersCache, tranfersDBPublisher)
 	logger.Infof("services created")
 
 	// init handlers
