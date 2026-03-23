@@ -24,13 +24,14 @@ func main() {
 	transfersDB := repositories.NewTransfersMongoDBRepository(cfg.MongoDBConfig)
 	//transfersDB := repositories.NewTransfersMySqlDBRepository(cfg.MySqlDBConfig)
 	transfersCache := repositories.NewTransfersMemcachedRepository(cfg.MemcachedConfig)
+	transfersCacheLocal := repositories.NewTransfersCcachedRepository(cfg.CcacheConfig)
 	logger.Info("repositories created")
 
 	// init clients
 	tranfersDBPublisher := clients.NewRabbitMQClient(cfg.RabbitMQConfig)
 
 	// init services
-	transfersService := services.NewTransfersService(cfg.Business, transfersDB, transfersCache, tranfersDBPublisher)
+	transfersService := services.NewTransfersService(cfg.Business, transfersDB, transfersCache, transfersCacheLocal, tranfersDBPublisher)
 	logger.Infof("services created")
 
 	// init handlers

@@ -13,6 +13,7 @@ type Config struct {
 	MongoDBConfig   MongoDB        `json:"mongodb"`
 	MySqlDBConfig   MySqlDB        `json:"mysql"`
 	MemcachedConfig Memcached      `json:"memcached"`
+	CcacheConfig    CCache         `json:"ccache"`
 	RabbitMQConfig  RabbitMQ       `json:"rabbitmq"`
 }
 
@@ -43,6 +44,11 @@ type Memcached struct {
 	TTLSeconds int    `env:"MEMCACHED_TTL_SECONDS" envDefault:"30" json:"ttl_seconds"`
 }
 
+type CCache struct {
+	TTLSeconds int   `env:"CCACHE_TTL_SECONDS" envDefault:"15" json:"ttl_seconds"`
+	MaxSize    int64 `env:"CCACHE_MAX_SIZE" envDefault:"10000" json:"max_size"`
+}
+
 type RabbitMQ struct {
 	Hostname  string `env:"RABBITMQ_HOSTNAME" envDefault:"rabbitmq" json:"hostname"`
 	Port      int    `env:"RABBITMQ_PORT" envDefault:"5672" json:"port"`
@@ -58,6 +64,7 @@ func ParseFromEnv() *Config {
 		&cfg.MongoDBConfig,
 		&cfg.MySqlDBConfig,
 		&cfg.MemcachedConfig,
+		&cfg.CcacheConfig,
 		&cfg.RabbitMQConfig,
 	} {
 		if err := env.Parse(nested); err != nil {
