@@ -130,3 +130,25 @@ func (r *TransfersCcacheRepo) Delete(ctx context.Context, id string) error {
 	r.client.Delete(id)
 	return nil
 }
+
+func (r *TransfersCcacheRepo) GetByUserID(ctx context.Context, id string) (models.Transfer, error) {
+	item := r.client.Get(id)
+	if item == nil || item.Expired() {
+		if item != nil && item.Expired() {
+			r.client.Delete(id)
+		}
+
+		return models.Transfer{}, fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
+	}
+
+	dao := item.Value()
+
+	return models.Transfer{
+		ID:         dao.ID,
+		SenderID:   dao.SenderID,
+		ReceiverID: dao.ReceiverID,
+		Currency:   enums.ParseCurrency(dao.Currency),
+		Amount:     dao.Amount,
+		State:      dao.State,
+	}, nil
+}

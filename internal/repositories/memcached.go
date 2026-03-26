@@ -173,3 +173,31 @@ func (r *TransfersMemcacheRepo) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+func (r *TransfersMemcacheRepo) GetByUserID(ctx context.Context, id string) (models.Transfer, error) {
+
+	item, err := r.client.Get(id)
+	if err != nil {
+
+		if err == memcache.ErrCacheMiss {
+			return models.Transfer{}, fmt.Errorf("transfer not found: %w", known_errors.ErrNotFound)
+		}
+
+		return models.Transfer{}, fmt.Errorf("error getting transfer from cache: %w", err)
+	}
+
+	var dao transferCacheDAO
+
+	err = json.Unmarshal(item.Value, &dao)
+	if err != nil {
+		return models.Transfer{}, fmt.Errorf("error unmarshaling cached transfer: %w", err)
+	}
+
+	return models.Transfer{
+		ID:         dao.ID,
+		SenderID:   dao.SenderID,
+		ReceiverID: dao.ReceiverID,
+		Currency:   enums.ParseCurrency(dao.Currency),
+		Amount:     dao.Amount,
+		State:      dao.State,
+	}, nil
+}

@@ -18,6 +18,7 @@ type TransfersRepository interface {
 	GetByID(ctx context.Context, id string) (models.Transfer, error)
 	Update(ctx context.Context, transfer models.Transfer) error
 	Delete(ctx context.Context, id string) error
+	GetByUserID(ctx context.Context, id string) (models.Transfer, error)
 }
 
 type TransfersPublisher interface {
@@ -165,4 +166,12 @@ func (s *TransfersService) Delete(ctx context.Context, id string) error {
 		logging.Logger.Infof("Transfer deleting in Local cache with ID: %s", id)
 	}
 	return nil
+}
+
+func (s *TransfersService) GetByUserID(ctx context.Context, userID string) (models.Transfer, error) {
+	transfer, err := s.transfersRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return models.Transfer{}, fmt.Errorf("error getting transfer for user %s from repository: %w", userID, err)
+	}
+	return transfer, nil
 }
