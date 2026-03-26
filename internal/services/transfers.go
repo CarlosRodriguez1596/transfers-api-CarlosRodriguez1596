@@ -140,6 +140,12 @@ func (s *TransfersService) Update(ctx context.Context, transfer models.Transfer)
 	if err := s.transfersRepo.Update(ctx, transfer); err != nil {
 		return fmt.Errorf("error updating transfer %s in repository: %w", transfer.ID, err)
 	}
+	// publish event
+	go func() {
+		if err := s.transfersPublisher.Publish("update", transfer.ID); err != nil {
+			logging.Logger.Warnf("error publishing transfer create event: %w", err)
+		}
+	}()
 	if err := s.transfersCacheLocal.Update(ctx, transfer); err != nil {
 		logging.Logger.Warnf("error updating transfer in Local cache: %w", err)
 	}
@@ -155,6 +161,12 @@ func (s *TransfersService) Delete(ctx context.Context, id string) error {
 	} else {
 		logging.Logger.Infof("Transfer deleting in Local cache with ID: %s", id)
 	}
+	// publish event
+	go func() {
+		if err := s.transfersPublisher.Publish("delete", id); err != nil {
+			logging.Logger.Warnf("error publishing transfer create event: %w", err)
+		}
+	}()
 	if err := s.transfersCacheLocal.Delete(ctx, id); err != nil {
 		logging.Logger.Warnf("error deleting transfer %s from Local cache: %w", id, err)
 	} else {

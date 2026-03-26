@@ -28,11 +28,20 @@ func main() {
 	logger.Info("repositories created")
 
 	// init clients
-	tranfersDBPublisher := clients.NewRabbitMQClient(cfg.RabbitMQConfig)
+	transfersDBPublisher := clients.NewRabbitMQClient(cfg.RabbitMQConfig)
+	transfersConsumer := clients.NewRabbitMQConsumer(cfg.RabbitMQConfig)
 
 	// init services
-	transfersService := services.NewTransfersService(cfg.Business, transfersDB, transfersCache, transfersCacheLocal, tranfersDBPublisher)
+	transfersService := services.NewTransfersService(cfg.Business, transfersDB, transfersCache, transfersCacheLocal, transfersDBPublisher)
 	logger.Infof("services created")
+
+	// init consumer
+	go func() {
+		logger.Info("rabbitmq consumer started")
+		if err := transfersConsumer.Consume(); err != nil {
+			logger.Fatalf("consumer error: %v", err)
+		}
+	}()
 
 	// init handlers
 	transfersHandler := handlers.NewTransfersHandler(transfersService)
