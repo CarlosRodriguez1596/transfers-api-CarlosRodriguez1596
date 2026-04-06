@@ -65,13 +65,13 @@ func (s *TransfersService) Create(ctx context.Context, transfer models.Transfer)
 	}
 	logging.Logger.Infof("Transfer created in DB with ID: %s", id)
 
+	transfer.ID = id
 	// publish event
 	go func() {
 		if err := s.transfersPublisher.Publish("create", transfer.ID); err != nil {
 			logging.Logger.Warnf("error publishing transfer create event: %w", err)
 		}
 	}()
-	transfer.ID = id
 
 	// local cache
 	if _, err := s.transfersCacheLocal.Create(ctx, transfer); err != nil {
